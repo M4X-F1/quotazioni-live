@@ -38,31 +38,47 @@
             color: #137333;
             font-size: 0.75rem;
             font-weight: bold;
-            padding: 4px 8px;
+            padding: 4px 10px;
             border-radius: 20px;
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
         }
-        .dot { height: 8px; width: 8px; background-color: #137333; border-radius: 50%; display: inline-block; }
+        .dot {
+            height: 8px;
+            width: 8px;
+            background-color: #137333;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.5; }
+            100% { transform: scale(0.95); opacity: 1; }
+        }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 12px 8px; text-align: left; border-bottom: 1px solid #eee; }
         th { font-size: 0.85rem; text-transform: uppercase; color: #777; }
-        td.prezzo { text-align: right; font-weight: bold; color: #b8860b; font-size: 1.05rem; }
-        td.argento { color: #607d8b; }
-        .stato { text-align: center; padding: 20px; color: #666; font-size: 0.9rem; }
-        .footer { margin-top: 16px; font-size: 0.75rem; color: #888; text-align: center; }
-        .btn-aggiorna {
-            background: none;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            padding: 5px 12px;
-            font-size: 0.75rem;
-            cursor: pointer;
-            margin-top: 10px;
-            color: #555;
+        td.prezzo {
+            text-align: right;
+            font-weight: bold;
+            color: #b8860b;
+            font-size: 1.05rem;
+            transition: background-color 0.4s ease;
         }
-        .btn-aggiorna:hover { background: #f0f0f0; }
+        td.argento { color: #607d8b; }
+        .prezzo-cambiato {
+            background-color: #fff3cd;
+            border-radius: 4px;
+        }
+        .stato { text-align: center; padding: 20px; color: #666; font-size: 0.9rem; }
+        .footer {
+            margin-top: 16px;
+            font-size: 0.75rem;
+            color: #888;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -70,30 +86,32 @@
 <div class="card">
     <div class="header">
         <h2>Quotazioni Metalli</h2>
-        <span class="badge-live"><span class="dot"></span> LIVE</span>
+        <span class="badge-live"><span class="dot"></span> LIVE 1s</span>
     </div>
 
     <div id="contenuto">
-        <div class="stato">Recupero quotazioni in tempo reale...</div>
+        <div class="stato">Connessione al feed in tempo reale...</div>
     </div>
 
-    <div class="footer">
-        <div id="aggiornamento"></div>
-        <button class="btn-aggiorna" onclick="caricaQuotazioni()">↻ Forza aggiornamento ora</button>
-    </div>
+    <div class="footer" id="aggiornamento">Inizializzazione...</div>
 </div>
 
 <script>
     const WORKER_URL = "https://tight-smoke-037bprezzi-oro.cappolifabrizio.workers.dev/";
+    let prezziPrecedenti = new Map();
+    let inCorso = false;
 
     async function caricaQuotazioni() {
+        // Evita di accavallare richieste se una impiega più di 1 secondo
+        if (inCorso) return;
+        inCorso = true;
+
         const contenitore = document.getElementById('contenuto');
-        const footer = document.getElementById('aggiornamento');
-        footer.textContent = "Aggiornamento in corso...";
+        const infoAggiornamento = document.getElementById('aggiornamento');
 
         try {
             const response = await fetch(WORKER_URL + "?t=" + Date.now());
-            if (!response.ok) throw new Error('Risposta HTTP ' + response.status);
+            if (!response.ok) throw new Error('HTTP ' + response.status);
             
             const html = await response.text();
             const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -104,9 +122,9 @@
             let match;
 
             while ((match = regex.exec(testoPagina)) !== null) {
-                const metallo = match[1].toUpperCase();
-                const titolo = match[2].toUpperCase();
-                const prezzo = match[3].trim();
+                const metallo = match.toUpperCase();
+                const titolo = match.toUpperCase();
+                const prezzo = match.trim();
                 const chiave = `${metallo} ${titolo}`;
 
                 if (!risultati.has(chiave)) {
@@ -114,48 +132,51 @@
                 }
             }
 
-            if (risultati.size === 0) {
-                contenitore.innerHTML = '<div class="stato">Prezzi non trovati nella pagina.</div>';
-                footer.textContent = "";
-                return;
+            if (risultati.size > 0) {
+                let tabellaHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Metallo / Titolo</th>
+                                <th style="text-align: right;">Quotazione</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                risultati.forEach((valore, chiave) => {
+                    const vecchioPrezzo = prezziPrecedenti.get(chiave);
+                    const isCambiato = vecchioPrezzo && vecchioPrezzo !== valore.prezzo;
+                    const classeColore = valore.metallo === 'ARGENTO' ? 'prezzo argento' : 'prezzo';
+                    const classeFlash = isCambiato ? 'prezzo-cambiato' : '';
+
+                    tabellaHTML += `
+                        <tr>
+                            <td><strong>${valore.metallo}</strong> ${valore.titolo}</td>
+                            <td class="${classeColore} ${classeFlash}">${valore.prezzo}</td>
+                        </tr>
+                    `;
+                    prezziPrecedenti.set(chiave, valore.prezzo);
+                });
+
+                tabellaHTML += `</tbody></table>`;
+                contenitore.innerHTML = tabellaHTML;
             }
 
-            let tabellaHTML = `
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Metallo / Titolo</th>
-                            <th style="text-align: right;">Quotazione</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            risultati.forEach((valore) => {
-                const classeColore = valore.metallo === 'ARGENTO' ? 'prezzo argento' : 'prezzo';
-                tabellaHTML += `
-                    <tr>
-                        <td><strong>${valore.metallo}</strong> ${valore.titolo}</td>
-                        <td class="${classeColore}">${valore.prezzo}</td>
-                    </tr>
-                `;
-            });
-
-            tabellaHTML += `</tbody></table>`;
-            contenitore.innerHTML = tabellaHTML;
-
             const ora = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            footer.textContent = `Aggiornato al secondo: ${ora}`;
+            infoAggiornamento.textContent = `Aggiornato al secondo: ${ora}`;
 
         } catch (errore) {
             console.error(errore);
-            contenitore.innerHTML = `<div class="stato" style="color: #d93025;">Errore: ${errore.message}</div>`;
-            footer.textContent = "";
+            infoAggiornamento.textContent = "Riconnessione in corso...";
+        } finally {
+            inCorso = false;
         }
     }
 
+    // Avvia subito e ripete ogni 1000 millisecondi (1 secondo)
     caricaQuotazioni();
-    setInterval(caricaQuotazioni, 60000);
+    setInterval(caricaQuotazioni, 1000);
 </script>
 
 </body>
