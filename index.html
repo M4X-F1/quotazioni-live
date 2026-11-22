@@ -84,7 +84,7 @@
 </div>
 
 <script>
-    const WORKER_URL = "https://workers.dev";
+    const WORKER_URL = "https://tight-smoke-037bprezzi-oro.cappolifabrizio.workers.dev/";
 
     async function caricaQuotazioni() {
         const contenitore = document.getElementById('contenuto');
@@ -104,9 +104,9 @@
             let match;
 
             while ((match = regex.exec(testoPagina)) !== null) {
-                const metallo = match.toUpperCase();
-                const titolo = match.toUpperCase();
-                const prezzo = match.trim();
+                const metallo = match[1].toUpperCase();
+                const titolo = match[2].toUpperCase();
+                const prezzo = match[3].trim();
                 const chiave = `${metallo} ${titolo}`;
 
                 if (!risultati.has(chiave)) {
