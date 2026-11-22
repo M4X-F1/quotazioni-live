@@ -102,7 +102,6 @@
     let inCorso = false;
 
     async function caricaQuotazioni() {
-        // Evita di accavallare richieste se una impiega più di 1 secondo
         if (inCorso) return;
         inCorso = true;
 
@@ -122,9 +121,10 @@
             let match;
 
             while ((match = regex.exec(testoPagina)) !== null) {
-                const metallo = match.toUpperCase();
-                const titolo = match.toUpperCase();
-                const prezzo = match.trim();
+                const [, metalloRaw, titoloRaw, prezzoRaw] = match;
+                const metallo = metalloRaw.toUpperCase();
+                const titolo = titoloRaw.toUpperCase();
+                const prezzo = prezzoRaw.trim();
                 const chiave = `${metallo} ${titolo}`;
 
                 if (!risultati.has(chiave)) {
@@ -174,7 +174,6 @@
         }
     }
 
-    // Avvia subito e ripete ogni 1000 millisecondi (1 secondo)
     caricaQuotazioni();
     setInterval(caricaQuotazioni, 1000);
 </script>
