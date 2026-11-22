@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quotazioni Oro e Argento Live</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            max-width: 450px;
+            width: 100%;
+            padding: 24px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+        }
+        .header h2 { margin: 0; font-size: 1.25rem; color: #1a1a1a; }
+        .badge-live {
+            background-color: #e6f4ea;
+            color: #137333;
+            font-size: 0.75rem;
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .dot { height: 8px; width: 8px; background-color: #137333; border-radius: 50%; display: inline-block; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 8px; text-align: left; border-bottom: 1px solid #eee; }
+        th { font-size: 0.85rem; text-transform: uppercase; color: #777; }
+        td.prezzo { text-align: right; font-weight: bold; color: #b8860b; font-size: 1.05rem; }
+        td.argento { color: #607d8b; }
+        .stato { text-align: center; padding: 20px; color: #666; font-size: 0.9rem; }
+        .footer { margin-top: 16px; font-size: 0.75rem; color: #888; text-align: center; }
+        .btn-aggiorna {
+            background: none;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 5px 12px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            margin-top: 10px;
+            color: #555;
+        }
+        .btn-aggiorna:hover { background: #f0f0f0; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div class="header">
+        <h2>Quotazioni Metalli</h2>
+        <span class="badge-live"><span class="dot"></span> LIVE</span>
+    </div>
+
+    <div id="contenuto">
+        <div class="stato">Recupero quotazioni in tempo reale...</div>
+    </div>
+
+    <div class="footer">
+        <div id="aggiornamento"></div>
+        <button class="btn-aggiorna" onclick="caricaQuotazioni()">↻ Forza aggiornamento ora</button>
+    </div>
+</div>
+
+<script>
+    const WORKER_URL = "https://workers.dev";
+
+    async function caricaQuotazioni() {
+        const contenitore = document.getElementById('contenuto');
+        const footer = document.getElementById('aggiornamento');
+        footer.textContent = "Aggiornamento in corso...";
+
+        try {
+            const response = await fetch(`${WORKER_URL}?t=${Date.now()}`);
+            if (!response.ok) throw new Error('Errore nella connessione al Worker');
+            
+            const html = await response.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const testoPagina = doc.body.textContent || "";
+
+            const regex = /(ORO|ARGENTO)\s+([0-9]+(?:KT|‰)?)\s*[·•|-]\s*([0-9]+,[0-9]+\s*€\/g)/gi;
+            const risultati = new Map();
+            let match;
+
+            while ((match = regex.exec(testoPagina)) !== null) {
+                const metallo = match.toUpperCase();
+                const titolo = match.toUpperCase();
+                const prezzo = match.trim();
+                const chiave = `${metallo} ${titolo}`;
+
+                if (!risultati.has(chiave)) {
+                    risultati.set(chiave, { metallo, titolo, prezzo });
+                }
+            }
+
+            if (risultati.size === 0) {
+                contenitore.innerHTML = '<div class="stato">Prezzi non trovati nella pagina.</div>';
+                footer.textContent = "";
+                return;
+            }
+
+            let tabellaHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Metallo / Titolo</th>
+                            <th style="text-align: right;">Quotazione</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            risultati.forEach((valore) => {
+                const classeColore = valore.metallo === 'ARGENTO' ? 'prezzo argento' : 'prezzo';
+                tabellaHTML += `
+                    <tr>
+                        <td><strong>${valore.metallo}</strong> ${valore.titolo}</td>
+                        <td class="${classeColore}">${valore.prezzo}</td>
+                    </tr>
+                `;
+            });
+
+            tabellaHTML += `</tbody></table>`;
+            contenitore.innerHTML = tabellaHTML;
+
+            const ora = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            footer.textContent = `Aggiornato al secondo: ${ora}`;
+
+        } catch (errore) {
+            console.error(errore);
+            contenitore.innerHTML = `<div class="stato" style="color: #d93025;">Errore: ${errore.message}</div>`;
+            footer.textContent = "";
+        }
+    }
+
+    // Carica subito e aggiorna automaticamente ogni 60 secondi
+    caricaQuotazioni();
+    setInterval(caricaQuotazioni, 60000);
+</script>
+
+</body>
+</html>
