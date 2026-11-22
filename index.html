@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quotazioni Oro e Argento Live</title>
+    <title>Quotazioni e Calcolo Oro e Argento Live</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -58,8 +58,8 @@
             100% { transform: scale(0.95); opacity: 1; }
         }
         table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px 8px; text-align: left; border-bottom: 1px solid #eee; }
-        th { font-size: 0.85rem; text-transform: uppercase; color: #777; }
+        th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #eee; }
+        th { font-size: 0.8rem; text-transform: uppercase; color: #777; }
         td.prezzo {
             text-align: right;
             font-weight: bold;
@@ -73,6 +73,66 @@
             border-radius: 4px;
         }
         .stato { text-align: center; padding: 20px; color: #666; font-size: 0.9rem; }
+        .calcolatore {
+            margin-top: 22px;
+            padding-top: 18px;
+            border-top: 2px solid #f0f0f0;
+        }
+        .calcolatore h3 {
+            margin: 0 0 12px 0;
+            font-size: 1rem;
+            color: #1a1a1a;
+        }
+        .calc-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+        }
+        .form-group select, .form-group input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            color: #333;
+            background-color: #fafafa;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-group select:focus, .form-group input:focus {
+            border-color: #b8860b;
+            background-color: #fff;
+        }
+        .risultato-box {
+            background-color: #fdfbf2;
+            border: 1px solid #f0e4b8;
+            border-radius: 8px;
+            padding: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .risultato-label {
+            font-size: 0.85rem;
+            color: #666;
+            font-weight: 600;
+        }
+        .risultato-valore {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: #b8860b;
+        }
         .footer {
             margin-top: 16px;
             font-size: 0.75rem;
@@ -93,13 +153,56 @@
         <div class="stato">Connessione al feed in tempo reale...</div>
     </div>
 
+    <div class="calcolatore">
+        <h3>Calcola il valore in tempo reale</h3>
+        <div class="calc-grid">
+            <div class="form-group">
+                <label for="select-metallo">Metallo / Titolo</label>
+                <select id="select-metallo" onchange="aggiornaCalcolo()">
+                    <option value="">Caricamento...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="input-grammi">Peso (grammi)</label>
+                <input type="number" id="input-grammi" placeholder="Es. 10" min="0" step="0.01" oninput="aggiornaCalcolo()">
+            </div>
+        </div>
+        <div class="risultato-box">
+            <span class="risultato-label">Valore stimato:</span>
+            <span class="risultato-valore" id="valore-totale">0,00 €</span>
+        </div>
+    </div>
+
     <div class="footer" id="aggiornamento">Inizializzazione...</div>
 </div>
 
 <script>
     const WORKER_URL = "https://tight-smoke-037bprezzi-oro.cappolifabrizio.workers.dev/";
     let prezziPrecedenti = new Map();
+    let prezziNumerici = new Map();
     let inCorso = false;
+
+    function aggiornaCalcolo() {
+        const select = document.getElementById('select-metallo');
+        const inputGrammi = document.getElementById('input-grammi');
+        const boxTotale = document.getElementById('valore-totale');
+
+        const chiaveSelezionata = select.value;
+        const grammi = parseFloat(inputGrammi.value);
+
+        if (!chiaveSelezionata || isNaN(grammi) || grammi <= 0) {
+            boxTotale.textContent = "0,00 €";
+            return;
+        }
+
+        const prezzoAlGrammo = prezziNumerici.get(chiaveSelezionata) || 0;
+        const totale = grammi * prezzoAlGrammo;
+
+        boxTotale.textContent = totale.toLocaleString('it-IT', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }) + " €";
+    }
 
     async function caricaQuotazioni() {
         if (inCorso) return;
@@ -107,6 +210,7 @@
 
         const contenitore = document.getElementById('contenuto');
         const infoAggiornamento = document.getElementById('aggiornamento');
+        const selectMetallo = document.getElementById('select-metallo');
 
         try {
             const response = await fetch(WORKER_URL + "?t=" + Date.now());
@@ -129,10 +233,17 @@
 
                 if (!risultati.has(chiave)) {
                     risultati.set(chiave, { metallo, titolo, prezzo });
+                    const numero = parseFloat(prezzo.replace('€/g', '').trim().replace(',', '.'));
+                    if (!isNaN(numero)) {
+                        prezziNumerici.set(chiave, numero);
+                    }
                 }
             }
 
             if (risultati.size > 0) {
+                const selezioneAttuale = selectMetallo.value;
+                let opzioniSelect = "";
+
                 let tabellaHTML = `
                     <table>
                         <thead>
@@ -157,10 +268,16 @@
                         </tr>
                     `;
                     prezziPrecedenti.set(chiave, valore.prezzo);
+
+                    const selected = (chiave === selezioneAttuale) ? 'selected' : '';
+                    opzioniSelect += `<option value="${chiave}" ${selected}>${chiave} (${valore.prezzo})</option>`;
                 });
 
                 tabellaHTML += `</tbody></table>`;
                 contenitore.innerHTML = tabellaHTML;
+
+                selectMetallo.innerHTML = opzioniSelect;
+                aggiornaCalcolo();
             }
 
             const ora = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
